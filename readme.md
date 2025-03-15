@@ -9,7 +9,9 @@ The model has been trained using the dataset from Kaggle: [Predictive Maintenanc
 ## Project Structure
 The project consists of the following key files:
 - **`app.py`**: Main Streamlit application script.
-- **`/src/pm_rohithnair3.py`**: Data preprocessing and model training script.
+- **`/src/pm_rohithnair3.py`**: Model training script.
+- **`/data/raw/CIA-1.csv`**: Original data repository.
+- **`/data/processed/`**: processed data repository.
 - **`RF_predictive_maintenance.pkl`**: Trained Random Forest model.
 - **`scaler.pkl`**: Scaler used to normalize the dataset.
 - **`medians.pkl`**: File containing the median values for dataset features.
