@@ -13,7 +13,7 @@ Original file is located at
 
 import pandas as pd
 import numpy as np
-import joblib  # Library to save models
+import joblib
 import matplotlib.pyplot as plt
 import seaborn as sns
 
@@ -21,8 +21,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import LocalOutlierFactor
 from sklearn.preprocessing import StandardScaler
 from imblearn.over_sampling import SMOTE
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 
 ###################
 ### FUNCTIONS DEFINITIONS
@@ -30,18 +30,18 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 
 def data_preprocessing(file_path="CIA-1.csv"):
     """
-    Perform full data preprocessing including:
-    - Column renaming
-    - Dropping unnecessary columns
-    - Categorical to numerical conversion
-    - Outlier removal (IQR & LOF)
+    Full data preprocessing:
+    - Rename columns
+    - Drop unnecessary columns
+    - Remove outliers
+    - Compute median values BEFORE standardization
     - Standardization
     - SMOTE for balancing classes
-    - Saving preprocessed data as CSV
 
     Returns:
-    - df_resampled: Fully processed DataFrame
-    - scaler: The StandardScaler fitted to the data
+    - df_resampled: Processed DataFrame
+    - scaler: StandardScaler fitted to the data
+    - medians: Dictionary with original median values before standardization
     """
     ###################
     ### UPLOAD DATA
@@ -61,16 +61,10 @@ def data_preprocessing(file_path="CIA-1.csv"):
               inplace=True)
 
     ###################
-    ### TWO COLUMN ELIMINATION
+    ### COLUMN ELIMINATION (REMOVED "Type")
     ###################
 
-    df.drop(['Product ID', 'UDI'], axis=1, inplace=True)
-
-    ###################
-    ### CATEGORICAL TO NUMERICAL CONVERSION (Type COLUMN)
-    ###################
-
-    df['Type'].replace({'L': 0, 'M': 1, 'H': 2}, inplace=True)
+    df.drop(['Product ID', 'UDI', 'Type'], axis=1, inplace=True)
 
     ###################
     ### ONE-HOT ENCODING TO FAILURE TYPE
@@ -90,7 +84,7 @@ def data_preprocessing(file_path="CIA-1.csv"):
     ### OUTLIERS ELIMINATION
     ###################
 
-    excluded_columns = ['Type', 'Failure Type']
+    excluded_columns = ['Failure Type']
 
     for col in df.columns:
         if col not in excluded_columns:
@@ -106,10 +100,16 @@ def data_preprocessing(file_path="CIA-1.csv"):
     df = df[outliers != -1]
 
     ###################
+    ### COMPUTE MEDIAN VALUES BEFORE STANDARDIZATION
+    ###################
+
+    medians = df[["Rotational Speed", "Torque", "Vibration Levels"]].median().to_dict()
+
+    ###################
     ### STANDARDIZATION
     ###################
 
-    columns_to_normalize = [col for col in df.columns if col not in ['Type', 'Failure Type']]
+    columns_to_normalize = [col for col in df.columns if col != 'Failure Type']
     scaler = StandardScaler()
     df_standardized = df.copy()
     df_standardized[columns_to_normalize] = scaler.fit_transform(df[columns_to_normalize])
@@ -133,95 +133,72 @@ def data_preprocessing(file_path="CIA-1.csv"):
     # Save the balanced dataset
     df_resampled.to_csv("balanced_data.csv", index=False)
 
-    return df_resampled, scaler
-
-
-def train_evaluate_random_forest(X_train, y_train, X_test, y_test, n_estimators=200, max_depth=10, random_state=42):
-    """
-    Train and evaluate a Random Forest classifier.
-
-    Parameters:
-    - X_train: Training features
-    - y_train: Training target variable
-    - X_test: Testing features
-    - y_test: Testing target variable
-    - n_estimators: Number of trees (default=200)
-    - max_depth: Maximum depth of the trees (default=10)
-    - random_state: Random seed for reproducibility (default=42)
-
-    Returns:
-    - model: Trained Random Forest model
-    - metrics: Dictionary containing Accuracy, Precision, Recall, and F1-score
-    """
-    rf = RandomForestClassifier(
-        n_estimators=n_estimators,
-        max_depth=max_depth,
-        random_state=random_state,
-        class_weight="balanced"
-    )
-
-    rf.fit(X_train, y_train)
-    y_pred = rf.predict(X_test)
-
-    metrics = {
-        "accuracy": accuracy_score(y_test, y_pred),
-        "precision": precision_score(y_test, y_pred),
-        "recall": recall_score(y_test, y_pred),
-        "f1_score": f1_score(y_test, y_pred)
-    }
-
-    return rf, metrics
+    return df_resampled, scaler, medians
 
 
 ###################
 ### DATA PREPROCESSING FUNCTION CALL
 ###################
 
-df_resampled, scaler = data_preprocessing()
+df_resampled, scaler, medians = data_preprocessing()
 
 ###################
 ### DATA SELECTION & PARTITION
 ###################
 
-# Select the three best features
-selected_features = ["Operational Hours", "Process Temperature", "Air Temperature"]
-
-X = df_resampled[selected_features]
+X = df_resampled.drop(columns=["Failure Type"])
 y = df_resampled["Failure Type"]
+
+###################
+### CROSS VALIDATION
+###################
+
+kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+rf = RandomForestClassifier(n_estimators=200, max_depth=10, random_state=42, class_weight="balanced")
+
+cv_accuracy = cross_val_score(rf, X, y, cv=kf, scoring='accuracy').mean()
+cv_precision = cross_val_score(rf, X, y, cv=kf, scoring='precision').mean()
+cv_recall = cross_val_score(rf, X, y, cv=kf, scoring='recall').mean()
+cv_f1 = cross_val_score(rf, X, y, cv=kf, scoring='f1').mean()
+
+print("\n**Cross Validation Performance:**")
+print(f"CV Accuracy: {cv_accuracy:.3f}")
+print(f"CV Precision: {cv_precision:.3f}")
+print(f"CV Recall: {cv_recall:.3f}")
+print(f"CV F1-score: {cv_f1:.3f}")
+
+###################
+### RANDOM FOREST FINAL TRAINING & SAVE MODEL
+###################
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
 
-###################
-### RANDOM FOREST CLASSIFICATION & SAVE MODEL
-###################
+rf.fit(X_train, y_train)
+y_pred = rf.predict(X_test)
 
-rf_model, rf_metrics = train_evaluate_random_forest(X_train, y_train, X_test, y_test)
-
-# Save the trained Random Forest model
-joblib.dump(rf_model, "RF_predictive_maintenance.pkl")
-
-# Save the scaler
-scaler_info = {"scaler": scaler}
-joblib.dump(scaler_info, "scaler.pkl")
-
-# Load the balanced dataset generated after preprocessing
-df_resampled = pd.read_csv("balanced_data.csv")
-
-# Compute the median values for all columns
-medians = df_resampled.median().to_dict()
-
-# Save the median values as a .pkl file
+# Save trained model
+joblib.dump(rf, "RF_predictive_maintenance.pkl")
+joblib.dump({"scaler": scaler}, "scaler.pkl")
 joblib.dump(medians, "medians.pkl")
 
-print("Median values saved as 'medians.pkl'.")
+# Generate confusion matrix
+cm = confusion_matrix(y_test, y_pred)
+plt.figure(figsize=(6, 6))
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=["No Failure", "Failure"], yticklabels=["No Failure", "Failure"])
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.title("Confusion Matrix")
+plt.savefig("confusion_matrix.png")
+plt.show()
 
-
-# Print evaluation metrics
-print("**Random Forest Performance:**")
-print(f"Accuracy: {rf_metrics['accuracy']:.3f}")
-print(f"Precision: {rf_metrics['precision']:.3f}")
-print(f"Recall: {rf_metrics['recall']:.3f}")
-print(f"F1-score: {rf_metrics['f1_score']:.3f}")
+# Print final metrics
+print("\n**Final Model Performance:**")
+print(f"Accuracy: {accuracy_score(y_test, y_pred):.3f}")
+print(f"Precision: {precision_score(y_test, y_pred):.3f}")
+print(f"Recall: {recall_score(y_test, y_pred):.3f}")
+print(f"F1-score: {f1_score(y_test, y_pred):.3f}")
 
 print("\nModel saved as 'RF_predictive_maintenance.pkl'")
 print("Scaler saved as 'scaler.pkl'")
+print("Median values saved as 'medians.pkl'")
+print("Confusion matrix saved as 'confusion_matrix.png'")

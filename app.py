@@ -3,29 +3,29 @@ import numpy as np
 import pandas as pd
 import joblib
 
-# Cargar los archivos necesarios
-rf_model = joblib.load("RF_predictive_maintenance.pkl")  # Modelo entrenado
-scaler_info = joblib.load("scaler.pkl")  # Información del scaler
-scaler = scaler_info["scaler"]  # Extraer el scaler
-medians = joblib.load("medians.pkl")  # Cargar las medianas
+# Load necessary files
+rf_model = joblib.load("RF_predictive_maintenance.pkl")  # Trained model
+scaler_info = joblib.load("scaler.pkl")  # Scaler info
+scaler = scaler_info["scaler"]  # Extract scaler
+medians = joblib.load("medians.pkl")  # Load medians
 
-# Definir los valores de los sliders basados en la imagen
+# Define slider ranges based on the image
 slider_ranges = {
-    "Operational Hours": {"min": 5, "max": 170, "step": 0.1, "default": 74.6},
-    "Process Temperature": {"min": 307, "max": 310, "step": 0.1, "default": 308.1},
-    "Air Temperature": {"min": 296, "max": 300, "step": 0.1, "default": 297.4},
+    "Operational Hours": {"min": 5, "max": 170, "step": 0.1, "default": 96},
+    "Process Temperature": {"min": 307, "max": 310, "step": 0.1, "default": 308.9},
+    "Air Temperature": {"min": 296, "max": 300, "step": 0.1, "default": 298.8},
 }
 
-# Características esperadas por el modelo
+# Expected features in the model
 expected_features = [
     "Air Temperature", "Process Temperature", "Rotational Speed", 
     "Torque", "Vibration Levels", "Operational Hours"
 ]
 
-# Título de la aplicación
+# Streamlit app title
 st.title("PREDICTIVE MAINTENANCE SYSTEM")
 
-# Contenedores para sliders
+# Create sliders for user input
 input_values = {}
 for feature, params in slider_ranges.items():
     input_values[feature] = st.slider(
@@ -36,16 +36,23 @@ for feature, params in slider_ranges.items():
         step=float(params["step"]),
     )
 
-# Construcción del DataFrame de entrada con medianas
-X_new = {feature: input_values.get(feature, medians[feature]) for feature in expected_features}
+# Construct DataFrame using sliders for certain features and medians for others
+X_new = {
+    "Air Temperature": input_values["Air Temperature"],
+    "Process Temperature": input_values["Process Temperature"],
+    "Rotational Speed": medians["Rotational Speed"],
+    "Torque": medians["Torque"],
+    "Vibration Levels": medians["Vibration Levels"],
+    "Operational Hours": input_values["Operational Hours"]
+}
 
-# Convertir a DataFrame y asegurar el orden de las columnas
+# Convert to DataFrame ensuring column order is correct
 X_new_df = pd.DataFrame([X_new], columns=expected_features)
 
-# Estandarizar los datos con el scaler cargado
+# Standardize input data using the saved scaler
 X_new_scaled = scaler.transform(X_new_df)
 
-# Botón para realizar la predicción
+# Predict button
 if st.button("Predict"):
     prediction = rf_model.predict(X_new_scaled)[0]
 
