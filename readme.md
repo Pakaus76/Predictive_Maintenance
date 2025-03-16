@@ -34,6 +34,9 @@ $ pip install -r requirements.txt
 ```bash
 $ streamlit run app.py
 ```
+You can see an application using this algorithm at the following link: [Predictive Maintenance](https://predictivemaintenancerequena.streamlit.app/). 
+
+Simply enter the three features and click the "Predict" button to determine whether a failure is predicted or not.
 
 ## How to Use the Application
 1. **Adjust the sliders** to modify the following input features:
